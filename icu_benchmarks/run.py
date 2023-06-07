@@ -338,7 +338,7 @@ def run_preprocessing_pipeline(hirid_data_root, work_dir, var_ref_path, imputati
     if not label_path.exists():
         logging.info("Running label generation")
         labels.generate_labels(endpoints_path, imputation_for_endpoints_path, extended_general_data_path, label_path,
-                               nr_workers=nr_workers)
+                               nr_workers=nr_workers, horizon=horizon)
     else:
         logging.info(f"Labels in {label_path} seem to exist, skipping")
 
