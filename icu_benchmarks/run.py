@@ -70,6 +70,8 @@ def build_parser():
     preprocess_arguments.add_argument('--horizon', dest="horizon",
                                       default=12, required=False, type=int,
                                       help="Horizon of prediction in hours for failure tasks")
+    preprocess_arguments.add_argument('--vitals', default=False, type=bool,
+                                      help="Boolean only generate dataset with vitals")
 
     model_arguments = parent_parser.add_argument_group('Model arguments')
     model_arguments.add_argument('-l', '--logdir', dest="logdir",
@@ -249,7 +251,7 @@ def run_feature_extraction_step(common_path: Path, var_ref_path, feature_path, n
 
 def run_build_ml(common_path, labels_path, features_path: Optional[Path], ml_path, var_ref_path,
                  endpoint_names: Sequence[str],
-                 imputation: str, seed: int, split_path=None):
+                 imputation: str, seed: int, col_interest=None, split_path=None):
     common_ds = Dataset(common_path)
     parts = common_ds.list_parts()
 
@@ -272,7 +274,7 @@ def run_build_ml(common_path, labels_path, features_path: Optional[Path], ml_pat
         logging.info("Running build_ml")
         output_ds.prepare(single_part=True)
         to_ml(ml_path, parts, labels, features, endpoint_names, df_var_ref,
-              imputation, output_cols, split_path=split_path,
+              imputation, output_cols, col_interest, split_path=split_path,
               random_seed=seed)
     else:
         logging.info(f"Data in {ml_path} seem to exist, skipping")
@@ -290,7 +292,7 @@ def _get_general_data_path(general_data_path, hirid_data_root):
 
 
 def run_preprocessing_pipeline(hirid_data_root, work_dir, var_ref_path, imputation_method,
-                               general_data_path=None, split_path=None, seed=default_seed, nr_workers=1, horizon=12):
+                               general_data_path=None, split_path=None, seed=default_seed, nr_workers=1, horizon=12,only_vitals=False):
     work_dir.mkdir(exist_ok=True, parents=True)
 
     general_data_path = _get_general_data_path(general_data_path, hirid_data_root)
@@ -352,8 +354,11 @@ def run_preprocessing_pipeline(hirid_data_root, work_dir, var_ref_path, imputati
                  PHENOTYPING_NAME,
                  LOS_NAME)
 
+    col_interest = None
+    if only_vitals:
+        col_interest = ["HR","T Central","ABPs","ABPd","ABPm","NIBPs","NIBPd","NIBPm","SpO2","RR","glucose"]
     run_build_ml(common_path, label_path, features_path, ml_path, var_ref_path, endpoints,
-                 imputation_method, seed, split_path)
+                 imputation_method, seed, col_interest, split_path)
 
 
 def main(my_args=tuple(sys.argv[1:])):
@@ -368,7 +373,8 @@ def main(my_args=tuple(sys.argv[1:])):
         run_preprocessing_pipeline(args.hirid_data_root, args.work_dir, args.var_ref_path,
                                    imputation_method=args.imputation,
                                    split_path=args.split_path,
-                                   seed=args.seed, nr_workers=args.nr_workers, horizon=args.horizon)
+                                   seed=args.seed, nr_workers=args.nr_workers,
+                                   horizon=args.horizon, only_vitals=args.vitals)
 
     if args.command in ['train', 'evaluate']:
         load_weights = args.command == 'evaluate'

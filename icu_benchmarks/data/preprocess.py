@@ -73,9 +73,10 @@ def _normalize_cols(df, output_cols):
     return df
 
 
-def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_string, output_cols, split_path=None,
+def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_string, output_cols, col_interest=None, split_path=None,
           random_seed=42):
-    df_part = pd.read_parquet(parts[0])
+    
+    df_part = pd.read_parquet(parts[0], columns=col_interest)
     data_cols = df_part.columns
 
     common_path = parts[0].parent
@@ -102,7 +103,7 @@ def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_s
         features = [None] * len(parts)
 
     for p, l, f in zip(parts, labels, features):
-        df = impute_df(pd.read_parquet(p), fill_string=fill_string)
+        df = impute_df(pd.read_parquet(p, columns=col_interest), fill_string=fill_string)
         df_feat = pd.read_parquet(f) if f else pd.DataFrame(columns=[constants.PID])
 
         df_label = pd.read_parquet(l)[
