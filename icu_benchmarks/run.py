@@ -70,8 +70,8 @@ def build_parser():
     preprocess_arguments.add_argument('--horizon', dest="horizon",
                                       default=12, required=False, type=int,
                                       help="Horizon of prediction in hours for failure tasks")
-    preprocess_arguments.add_argument('--vitals', default=False, type=bool,
-                                      help="Boolean only generate dataset with vitals")
+    preprocess_arguments.add_argument('--col-interest', dest='col_interest', default='v1', type=str,
+                                      help="Type of ouput column generated. eg: vitals, v1.")
 
     model_arguments = parent_parser.add_argument_group('Model arguments')
     model_arguments.add_argument('-l', '--logdir', dest="logdir",
@@ -251,7 +251,7 @@ def run_feature_extraction_step(common_path: Path, var_ref_path, feature_path, n
 
 def run_build_ml(common_path, labels_path, features_path: Optional[Path], ml_path, var_ref_path,
                  endpoint_names: Sequence[str],
-                 imputation: str, seed: int, col_interest=None, split_path=None):
+                 imputation: str, seed: int, col_interest='v1', split_path=None):
     common_ds = Dataset(common_path)
     parts = common_ds.list_parts()
 
@@ -267,15 +267,19 @@ def run_build_ml(common_path, labels_path, features_path: Optional[Path], ml_pat
     df_var_ref = read_var_ref_table(var_ref_path)
 
     output_ds = Dataset(ml_path)
-
-    output_cols = schemata.cols_ml_stage_v1
+    
+    if col_interest == 'v1':
+        output_cols = schemata.cols_ml_stage_v1
+    elif col_interest == 'vitals':
+        output_cols = schemata.cols_ml_stage_vitals
+    else:
+        raise NotImplementedError(f"{col_interest} is not a valid name")
 
     if not output_ds.is_done():
         logging.info("Running build_ml")
         output_ds.prepare(single_part=True)
         to_ml(ml_path, parts, labels, features, endpoint_names, df_var_ref,
-              imputation, output_cols, col_interest, split_path=split_path,
-              random_seed=seed)
+              imputation, output_cols, split_path=split_path, random_seed=seed)
     else:
         logging.info(f"Data in {ml_path} seem to exist, skipping")
 
@@ -292,7 +296,7 @@ def _get_general_data_path(general_data_path, hirid_data_root):
 
 
 def run_preprocessing_pipeline(hirid_data_root, work_dir, var_ref_path, imputation_method,
-                               general_data_path=None, split_path=None, seed=default_seed, nr_workers=1, horizon=12,only_vitals=False):
+                               general_data_path=None, split_path=None, seed=default_seed, nr_workers=1, horizon=12,col_interest='v1'):
     work_dir.mkdir(exist_ok=True, parents=True)
 
     general_data_path = _get_general_data_path(general_data_path, hirid_data_root)
@@ -317,7 +321,8 @@ def run_preprocessing_pipeline(hirid_data_root, work_dir, var_ref_path, imputati
     label_path = work_dir / label_name
 
     features_path = work_dir / 'features_stage'
-    ml_name = 'ml_stage' + '_' + str(horizon) + 'h' + '.h5'
+    
+    ml_name = 'ml_stage' + '_' + str(horizon) + 'h' +('' if col_interest=='v1' else col_interest)+ '.h5'
     ml_path = work_dir / 'ml_stage' / ml_name
 
     run_merge_step(hirid_data_root, var_ref_path, merged_path, nr_workers, extended_general_data_path)
@@ -354,9 +359,6 @@ def run_preprocessing_pipeline(hirid_data_root, work_dir, var_ref_path, imputati
                  PHENOTYPING_NAME,
                  LOS_NAME)
 
-    col_interest = None
-    if only_vitals:
-        col_interest = ["HR","T Central","ABPs","ABPd","ABPm","NIBPs","NIBPd","NIBPm","SpO2","RR","glucose"]
     run_build_ml(common_path, label_path, features_path, ml_path, var_ref_path, endpoints,
                  imputation_method, seed, col_interest, split_path)
 
@@ -374,7 +376,7 @@ def main(my_args=tuple(sys.argv[1:])):
                                    imputation_method=args.imputation,
                                    split_path=args.split_path,
                                    seed=args.seed, nr_workers=args.nr_workers,
-                                   horizon=args.horizon, only_vitals=args.vitals)
+                                   horizon=args.horizon, col_interest=args.col_interest)
 
     if args.command in ['train', 'evaluate']:
         load_weights = args.command == 'evaluate'

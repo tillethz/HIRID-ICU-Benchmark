@@ -229,3 +229,17 @@ cols_ml_stage_v1 = ['datetime',
                     'v-Lac',
                     'vasodilatators_1.0',
                     'vasopressin']
+
+cols_ml_stage_vitals = ["datetime",
+                        "HR",
+                        "T Central",
+                        "ABPs",
+                        "ABPd",
+                        "ABPm",
+                        "NIBPs",
+                        "NIBPd",
+                        "NIBPm",
+                        "SpO2",
+                        "RR",
+                        "glucose"]
+

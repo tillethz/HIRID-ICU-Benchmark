@@ -23,13 +23,14 @@ def gather_cat_values(common_path, cat_values):
 def gather_stats_over_dataset(parts, to_standard_scale, to_min_max_scale, train_split_pids, fill_string):
     minmax_scaler = MinMaxScaler()
 
-    for p in parts:
-        df_part = impute_df(pd.read_parquet(p, engine='pyarrow', columns=to_min_max_scale + [constants.PID],
-                                            filters=[(constants.PID, "in", train_split_pids)]), fill_string=fill_string)
-        df_part = df_part.replace(np.inf, np.nan).replace(-np.inf, np.nan)
-        minmax_scaler.partial_fit(df_part[to_min_max_scale])
+    if len(to_min_max_scale) != 0:
+        for p in parts:
+            df_part = impute_df(pd.read_parquet(p, engine='pyarrow', columns=to_min_max_scale + [constants.PID],
+                                                filters=[(constants.PID, "in", train_split_pids)]), fill_string=fill_string)
+            df_part = df_part.replace(np.inf, np.nan).replace(-np.inf, np.nan)
+            minmax_scaler.partial_fit(df_part[to_min_max_scale])
 
-        gc.collect()
+            gc.collect()
 
     means = []
     stds = []
@@ -68,15 +69,14 @@ def _normalize_cols(df, output_cols):
     df = df[col_order]
 
     cmp_list = list(c for c in df.columns if c != constants.PID)
-    assert cmp_list == output_cols
+    assert set(cmp_list) == set(output_cols)
 
     return df
 
 
-def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_string, output_cols, col_interest=None, split_path=None,
+def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_string, output_cols, split_path=None,
           random_seed=42):
-    
-    df_part = pd.read_parquet(parts[0], columns=col_interest)
+    df_part = pd.read_parquet(parts[0])
     data_cols = df_part.columns
 
     common_path = parts[0].parent
@@ -88,7 +88,7 @@ def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_s
     cat_values, binary_values, to_standard_scale, to_min_max_scale = get_var_types(data_cols, df_var_ref)
     to_standard_scale = [c for c in to_standard_scale if c in set(output_cols)]
     to_min_max_scale = [c for c in to_min_max_scale if c in set(output_cols)]
-
+    
     cat_vars_levels = gather_cat_values(common_path, cat_values)
 
     (means, stds), minmax_scaler = gather_stats_over_dataset(parts, to_standard_scale, to_min_max_scale,
@@ -103,7 +103,7 @@ def to_ml(save_path, parts, labels, features, endpoint_names, df_var_ref, fill_s
         features = [None] * len(parts)
 
     for p, l, f in zip(parts, labels, features):
-        df = impute_df(pd.read_parquet(p, columns=col_interest), fill_string=fill_string)
+        df = impute_df(pd.read_parquet(p), fill_string=fill_string)
         df_feat = pd.read_parquet(f) if f else pd.DataFrame(columns=[constants.PID])
 
         df_label = pd.read_parquet(l)[
