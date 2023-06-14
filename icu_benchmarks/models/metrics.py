@@ -75,3 +75,35 @@ class MAE(EpochMetric):
             lambda x, y: mae_with_invert_compute_fn(x, y, invert_transform), output_transform=output_transform,
             check_compute_fn=check_compute_fn
         )
+
+
+def plot_confusion_matrix(cm):
+    """
+    Returns a matplotlib figure containing the plotted confusion matrix.
+    
+    Args:
+       cm (array, shape = [n, n]): a confusion matrix of integer classes
+    """
+    try:
+        cm = cm.detach().cpu().numpy()
+    except:
+        pass
+        
+    figure = plt.figure(figsize=(4, 4))
+    plt.matshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title("Confusion matrix")
+    
+    # Use white text if squares are dark; otherwise black.
+    threshold = cm.max() / 2.
+    
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        color = "white" if cm[i, j] > threshold else "black"
+        plt.text(j, i, f'{cm[i, j]}', horizontalalignment="center", color=color)
+        
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    return figure
+
+
+def plot_curve

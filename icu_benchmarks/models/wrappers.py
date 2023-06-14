@@ -12,6 +12,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score, accuracy_sco
     mean_absolute_error
 
 import torch
+from ignite.metrics.confusion_matrix import ConfusionMatrix
 from ignite.contrib.metrics import AveragePrecision, ROC_AUC, PrecisionRecallCurve, RocCurve
 from ignite.metrics import MeanAbsoluteError, Accuracy
 from torch.utils.data import DataLoader
@@ -20,7 +21,7 @@ from tqdm import tqdm
 import joblib
 
 from icu_benchmarks.models.utils import save_model, load_model_state
-from icu_benchmarks.models.metrics import BalancedAccuracy, MAE, CalibrationCurve
+from icu_benchmarks.models.metrics import BalancedAccuracy, MAE, CalibrationCurve, plot_confusion_matrix
 
 gin.config.external_configurable(torch.nn.functional.nll_loss, module='torch.nn.functional')
 gin.config.external_configurable(torch.nn.functional.cross_entropy, module='torch.nn.functional')
@@ -70,12 +71,19 @@ class DLWrapper(object):
                 y_pred = torch.softmax(y_pred, dim=1)
                 return y_pred, y
 
+        def encode_one_hot(output):
+            with torch.no_grad():
+                one_hot = torch.stack([output, 1 - output], dim=1)
+                return one_hot
+
         # output transform is not applied for contrib metrics so we do our own.
         if self.encoder.logit.out_features == 2:
             self.output_transform = softmax_binary_output_transform
+            self.encode_one_hot = encode_one_hot
             self.metrics = {'PR': AveragePrecision(), 'AUC': ROC_AUC(),
                             'PR_Curve': PrecisionRecallCurve(), 'ROC_Curve': RocCurve(),
-                            'Calibration_Curve': CalibrationCurve()}
+                            'Calibration_Curve': CalibrationCurve(),
+                            'ConfusionMatrix_Plot': ConfusionMatrix(num_classes=2)}
 
         elif self.encoder.logit.out_features == 1:
             self.output_transform = lambda x: x
@@ -127,13 +135,17 @@ class DLWrapper(object):
         train_loss = []
         self.encoder.train()
         for t, elem in tqdm(enumerate(train_loader)):
+            self.optimizer.zero_grad()
             loss, preds, target = self.step_fn(elem, weight)
             loss.backward()
             self.optimizer.step()
-            self.optimizer.zero_grad()
             train_loss.append(loss)
             for name, metric in metrics.items():
-                metric.update(self.output_transform((preds, target)))
+                if name.split('_')[0] == 'ConfusionMatrix':
+                    metric.update(self.output_transform((self.encode_one_hot(preds), target)))
+                else:
+                    metric.update(self.output_transform((preds, target)))
+
         train_metric_results = {}
         for name, metric in metrics.items():
             train_metric_results[name] = metric.compute()
@@ -192,26 +204,35 @@ class DLWrapper(object):
                 break
 
             # Logging
-            train_string = 'Train Epoch:{}'
-            train_values = [epoch + 1]
-            for name, value in train_metric_results.items():
-                if name.split('_')[-1] != 'Curve':
-                    train_string += ', ' + name + ':{:.4f}'
-                    train_values.append(value)
-                    train_writer.add_scalar(name, value, epoch)
-            train_writer.add_scalar('Loss', train_loss, epoch)
+            def log_metrics(metric_results, writer, set_type:str, epoch:int):
+                log_string = set_type + ' Epoch:{}'
+                log_values = [epoch + 1]
+                for name, value in metric_results.items():
+                    if name.split('_')[-1] == 'Curve':
+                        pass
+                    elif name.split('_')[0] == 'ConfusionMatrix':
+                        confution_plot = plot_confusion_matrix(value)
+                        writer.add_plot(name, confution_plot, epoch)
+                    else:
+                        log_string += ', ' + name + ':{:.4f}'
+                        log_values.append(value)
+                        writer.add_scalar(name, value, epoch)
+                return log_string.format(*log_values)
 
-            val_string = 'Val Epoch:{}'
-            val_values = [epoch + 1]
-            for name, value in val_metric_results.items():
-                if name.split('_')[-1] != 'Curve':
-                    val_string += ', ' + name + ':{:.4f}'
-                    val_values.append(value)
-                    val_writer.add_scalar(name, value, epoch)
+            # log training
+            train_string = log_metrics(train_metric_results, train_writer, 'Train', epoch)
+            train_writer.add_scalar('Loss', train_loss, epoch)
+            # log gradient histogram 
+            for tag, value in self.encoder.named_parameters():
+                if value.grad is not None:
+                    train_writer.add_histogram(tag + "/grad", value.grad.cpu(), epoch)
+
+            # log validation
+            val_string = log_metrics(val_metric_results, val_writer, 'Val', epoch)
             val_writer.add_scalar('Loss', val_loss, epoch)
 
-            logging.info(train_string.format(*train_values))
-            logging.info(val_string.format(*val_values))
+            logging.info(train_string)
+            logging.info(val_string)
 
         with open(os.path.join(self.logdir, 'val_metrics.pkl'), 'wb') as f:
             best_metrics['loss'] = best_loss
