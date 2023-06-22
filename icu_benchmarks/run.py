@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Sequence, Optional
 
+import matplotlib as mpl
+mpl.use('Agg')
 import pandas as pd
 from icu_benchmarks.data.feature_extraction import extract_feature_df
 

@@ -2,7 +2,9 @@ import torch
 from typing import Callable
 import numpy as np
 from ignite.metrics import EpochMetric
-
+import itertools
+import matplotlib.pyplot as plt
+from engineering_notation import EngNumber
 
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
@@ -89,21 +91,23 @@ def plot_confusion_matrix(cm):
     except:
         pass
         
-    figure = plt.figure(figsize=(4, 4))
-    plt.matshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.title("Confusion matrix")
+    figure, ax = plt.subplots(figsize=(4, 4))
+    ax.matshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    ax.set_title("Confusion matrix")
     
     # Use white text if squares are dark; otherwise black.
     threshold = cm.max() / 2.
     
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
         color = "white" if cm[i, j] > threshold else "black"
-        plt.text(j, i, f'{cm[i, j]}', horizontalalignment="center", color=color)
+        ax.text(j, i, f'{EngNumber(int(cm[i, j]))}', horizontalalignment="center", color=color)
         
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
+    ax.set_ylabel('True label')
+    ax.set_xlabel('Predicted label')
+    
+    labels = [None,"Positive","Negative"]
+    ax.set_xticklabels(labels)
+    ax.set_yticklabels(labels)
+    plt.yticks(rotation = 90)
+
     return figure
-
-
-def plot_curve

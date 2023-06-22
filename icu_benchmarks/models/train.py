@@ -34,7 +34,7 @@ def train_with_gin(model_dir=None,
 
     if reproducible:
         os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
-        torch.use_deterministic_algorithms(True)
+        torch.use_deterministic_algorithms(True, warn_only=True)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 

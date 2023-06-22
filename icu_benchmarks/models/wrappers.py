@@ -73,7 +73,7 @@ class DLWrapper(object):
 
         def encode_one_hot(output):
             with torch.no_grad():
-                one_hot = torch.stack([output, 1 - output], dim=1)
+                one_hot = torch.stack([1 - output, output], dim=1)
                 return one_hot
 
         # output transform is not applied for contrib metrics so we do our own.
@@ -121,8 +121,10 @@ class DLWrapper(object):
             out, aux_loss = out
         else:
             aux_loss = 0
+
         out_flat = torch.masked_select(out, mask.unsqueeze(-1)).reshape(-1, out.shape[-1])
         label_flat = torch.masked_select(labels, mask)
+       
         if out_flat.shape[-1] > 1:
             loss = self.loss(out_flat, label_flat.long(), weight=loss_weight) + aux_loss  # torch.long because NLL
         else:
@@ -142,7 +144,9 @@ class DLWrapper(object):
             train_loss.append(loss)
             for name, metric in metrics.items():
                 if name.split('_')[0] == 'ConfusionMatrix':
-                    metric.update(self.output_transform((self.encode_one_hot(preds), target)))
+                    metric.update(self.output_transform((
+                                    self.encode_one_hot(preds),
+                                    target.to(torch.bool))))
                 else:
                     metric.update(self.output_transform((preds, target)))
 
@@ -211,8 +215,8 @@ class DLWrapper(object):
                     if name.split('_')[-1] == 'Curve':
                         pass
                     elif name.split('_')[0] == 'ConfusionMatrix':
-                        confution_plot = plot_confusion_matrix(value)
-                        writer.add_plot(name, confution_plot, epoch)
+                        confusion_fig = plot_confusion_matrix(value)
+                        writer.add_figure(name, confusion_fig, epoch)
                     else:
                         log_string += ', ' + name + ':{:.4f}'
                         log_values.append(value)
@@ -223,9 +227,14 @@ class DLWrapper(object):
             train_string = log_metrics(train_metric_results, train_writer, 'Train', epoch)
             train_writer.add_scalar('Loss', train_loss, epoch)
             # log gradient histogram 
-            for tag, value in self.encoder.named_parameters():
-                if value.grad is not None:
-                    train_writer.add_histogram(tag + "/grad", value.grad.cpu(), epoch)
+            with torch.no_grad():
+                full_grad = []
+                for tag, value in self.encoder.named_parameters():
+                    if value.grad is not None:
+                        grad_values = value.grad.flatten().cpu()
+                        full_grad.append(grad_values)
+                        train_writer.add_histogram("grad/" + tag, grad_values, epoch)
+                train_writer.add_histogram("Full_Grad", np.concatenate(full_grad,axis=0), epoch,bins='fd')
 
             # log validation
             val_string = log_metrics(val_metric_results, val_writer, 'Val', epoch)
@@ -264,7 +273,12 @@ class DLWrapper(object):
                 loss, preds, target = self.step_fn(elem, weight)
                 eval_loss.append(loss)
                 for name, metric in metrics.items():
-                    metric.update(self.output_transform((preds, target)))
+                    if name.split('_')[0] == 'ConfusionMatrix':
+                        metric.update(self.output_transform((
+                                        self.encode_one_hot(preds),
+                                        target.to(torch.bool))))
+                    else:
+                        metric.update(self.output_transform((preds, target)))
 
             eval_metric_results = {}
             for name, metric in metrics.items():
