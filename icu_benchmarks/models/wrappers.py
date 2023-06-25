@@ -215,8 +215,8 @@ class DLWrapper(object):
                     if name.split('_')[-1] == 'Curve':
                         pass
                     elif name.split('_')[0] == 'ConfusionMatrix':
-                        confusion_fig = plot_confusion_matrix(value)
-                        writer.add_figure(name, confusion_fig, epoch)
+                        cm = str(cm.detach().cpu().numpy())
+                        writer.add_text(name, cm, epoch)
                     else:
                         log_string += ', ' + name + ':{:.4f}'
                         log_values.append(value)
