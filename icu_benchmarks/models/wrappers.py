@@ -215,8 +215,8 @@ class DLWrapper(object):
                     if name.split('_')[-1] == 'Curve':
                         pass
                     elif name.split('_')[0] == 'ConfusionMatrix':
-                        cm = str(cm.detach().cpu().numpy())
-                        writer.add_text(name, cm, epoch)
+                        confusion_fig = plot_confusion_matrix(value)
+                        writer.add_figure(name, confusion_fig, epoch)
                     else:
                         log_string += ', ' + name + ':{:.4f}'
                         log_values.append(value)
@@ -226,16 +226,7 @@ class DLWrapper(object):
             # log training
             train_string = log_metrics(train_metric_results, train_writer, 'Train', epoch)
             train_writer.add_scalar('Loss', train_loss, epoch)
-            # log gradient histogram 
-            with torch.no_grad():
-                full_grad = []
-                for tag, value in self.encoder.named_parameters():
-                    if value.grad is not None:
-                        grad_values = value.grad.flatten().cpu()
-                        full_grad.append(grad_values)
-                        train_writer.add_histogram("grad/" + tag, grad_values, epoch)
-                train_writer.add_histogram("Full_Grad", np.concatenate(full_grad,axis=0), epoch,bins='fd')
-
+            
             # log validation
             val_string = log_metrics(val_metric_results, val_writer, 'Val', epoch)
             val_writer.add_scalar('Loss', val_loss, epoch)

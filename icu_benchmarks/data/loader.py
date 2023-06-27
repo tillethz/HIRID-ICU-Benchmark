@@ -104,7 +104,7 @@ class ICUVariableLengthLoaderTables(object):
     """
 
     def __init__(self, data_path, on_RAM=True, shuffle=True, batch_size=1, splits=['train', 'val'], maxlen=-1, task=0,
-                 data_resampling=1, label_resampling=1, use_feat=False):
+                 data_resampling=1, label_resampling=1, use_feat=False, min_stay=0):
         """
         Args:
             data_path (string): Path to the h5 data file which should have 3/4 subgroups :data, labels, patient_windows
@@ -122,6 +122,7 @@ class ICUVariableLengthLoaderTables(object):
             data_resampling (int): Number of step at which we want to resample the data. Default to 1 (5min)
             label_resampling (int): Number of step at which we want to resample the labels (if they exists.
             Default to 1 (5min)
+            min_stay (int): minimum length of stay of a patient to be included
         """
         # We set sampling config
         self.shuffle = shuffle
@@ -197,7 +198,7 @@ class ICUVariableLengthLoaderTables(object):
 
         # Some patient might have no labeled time points so we don't consider them in valid samples.
         self.valid_indexes_samples = {split: np.array([i for i, k in enumerate(self.patient_windows[split])
-                                                       if np.any(~np.isnan(self.labels[split][k[0]:k[1]]))])
+                                                       if (np.any(~np.isnan(self.labels[split][k[0]:k[1]])) and (k[1]-k[0] >= min_stay))])
                                       for split in self.splits}
         self.num_samples = {split: len(self.valid_indexes_samples[split])
                             for split in self.splits}
