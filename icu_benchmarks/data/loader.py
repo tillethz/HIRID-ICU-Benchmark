@@ -133,6 +133,7 @@ class ICUVariableLengthLoaderTables(object):
         self.resampling = data_resampling
         self.label_resampling = label_resampling
         self.use_feat = use_feat
+        self.min_stay = min_stay
 
         self.columns = np.array([name.decode('utf-8') for name in self.data_h5['data']['columns'][:]])
         reindex_label = False
@@ -198,7 +199,7 @@ class ICUVariableLengthLoaderTables(object):
 
         # Some patient might have no labeled time points so we don't consider them in valid samples.
         self.valid_indexes_samples = {split: np.array([i for i, k in enumerate(self.patient_windows[split])
-                                                       if (np.any(~np.isnan(self.labels[split][k[0]:k[1]])) and (k[1]-k[0] >= min_stay))])
+                                                       if (np.any(~np.isnan(self.labels[split][k[0]:k[1]])) and (k[1]-k[0] >= self.min_stay))])
                                       for split in self.splits}
         self.num_samples = {split: len(self.valid_indexes_samples[split])
                             for split in self.splits}
@@ -240,7 +241,8 @@ class ICUVariableLengthLoaderTables(object):
         label_resampling_mask[::self.label_resampling] = 1.0
         label_resampling_mask = label_resampling_mask[::self.resampling]
         length_diff = self.maxlen - window.shape[0]
-        pad_mask = np.ones((window.shape[0],))
+        assert window.shape[0] >= self.min_stay, f"A patient with {window.shape[0]} samples was included by mistakes"
+        pad_mask = np.concatenate((np.zeros((self.min_stay-1,)),np.ones((window.shape[0]-self.min_stay+1,))))
 
         if length_diff > 0:
             window = np.concatenate([window, np.ones((length_diff, window.shape[1])) * pad_value], axis=0)
