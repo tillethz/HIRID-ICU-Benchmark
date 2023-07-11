@@ -239,6 +239,7 @@ class DLWrapper(object):
             pickle.dump(best_metrics, f)
 
         self.load_weights(os.path.join(self.logdir, 'model.torch'))  # We load back the best iteration
+        return best_metrics
 
     def test(self, dataset, weight):
         self.set_metrics()
@@ -254,6 +255,7 @@ class DLWrapper(object):
         for key, value in test_metrics.items():
             if isinstance(value, float):
                 logging.info('Test {} :  {}'.format(key, value))
+        return test_metrics
 
     def evaluate(self, eval_loader, metrics, weight):
         self.encoder.eval()
@@ -374,6 +376,7 @@ class MLWrapper(object):
 
         with open(os.path.join(self.logdir, 'val_metrics.pkl'), 'wb') as f:
             pickle.dump(val_metric_results, f)
+        return val_metric_results
 
     def test(self, dataset, weight):
         test_rep, test_label = dataset.get_data_and_labels()
@@ -395,6 +398,7 @@ class MLWrapper(object):
         logging.info(test_string.format(*test_values))
         with open(os.path.join(self.logdir, 'test_metrics.pkl'), 'wb') as f:
             pickle.dump(test_metric_results, f)
+        return test_metric_results
 
     def save_weights(self, save_path, model_type='lgbm'):
         if model_type == 'lgbm':

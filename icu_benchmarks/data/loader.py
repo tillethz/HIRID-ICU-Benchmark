@@ -241,7 +241,6 @@ class ICUVariableLengthLoaderTables(object):
         label_resampling_mask[::self.label_resampling] = 1.0
         label_resampling_mask = label_resampling_mask[::self.resampling]
         length_diff = self.maxlen - window.shape[0]
-        assert window.shape[0] >= self.min_stay, f"A patient with {window.shape[0]} samples was included by mistakes"
         pad_mask = np.concatenate((np.zeros((self.min_stay-1,)),np.ones((window.shape[0]-self.min_stay+1,))))
 
         if length_diff > 0:

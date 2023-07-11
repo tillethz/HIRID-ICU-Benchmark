@@ -43,9 +43,10 @@ def train_with_gin(model_dir=None,
     if gin_bindings is None:
         gin_bindings = []
     gin.parse_config_files_and_bindings(gin_config_files, gin_bindings)
-    train_common(model_dir, overwrite, load_weights)
+    metrics = train_common(model_dir, overwrite, load_weights)
     gin.clear_config()
 
+    return metrics
 
 
 @gin.configurable('train_common')
@@ -72,6 +73,11 @@ def train_common(log_dir, overwrite=False, load_weights=False, model=gin.REQUIRE
     model.set_logdir(log_dir)
     save_config_file(log_dir)  # We save the operative config before and also after training
     
+    metrics = {}
+    def filter_scalar(metrics, prefix:str):
+        return {(prefix+"_"+name):value for name, value in metrics.items() 
+                if not (name.split('_')[-1] in ['Curve','Plot'])}
+
     if load_weights:
         if os.path.isfile(os.path.join(log_dir, 'model.torch')):
             model.load_weights(os.path.join(log_dir, 'model.torch'))
@@ -85,7 +91,8 @@ def train_common(log_dir, overwrite=False, load_weights=False, model=gin.REQUIRE
 
     else:
         try:
-            model.train(dataset, val_dataset, weight)
+            val_metrics = model.train(dataset, val_dataset, weight)
+            metrics = filter_scalar(val_metrics,'val')
         except ValueError as e:
             logging.exception(e)
             if 'Only one class present' in str(e):
@@ -100,6 +107,9 @@ def train_common(log_dir, overwrite=False, load_weights=False, model=gin.REQUIRE
         test_dataset = dataset_fn(data_path, split='test')
         test_dataset.set_scaler(dataset.scaler)
         weight = dataset.get_balance()
-        model.test(test_dataset, weight)
+        test_metrics = model.test(test_dataset, weight)
+        {**metrics, **filter_scalar(test_metrics,'test')}
         del test_dataset.h5_loader.lookup_table
     save_config_file(log_dir)
+    
+    return metrics
