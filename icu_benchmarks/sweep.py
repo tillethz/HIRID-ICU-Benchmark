@@ -1,8 +1,4 @@
 #import wandb
-
-import yaml
-from yaml.loader import SafeLoader
-
 import argparse
 import os
 from icu_benchmarks.models.train import train_with_gin
@@ -16,22 +12,22 @@ def train_config(config, gin_dir, logdir):
     elif config["architecture"] == "LSTM":
        gin_config = os.path.join(gin_dir, "LSTM.gin")
     else:
-       raise NotImplementedError(f"Architecture {config["architecture"]} not implemented")
-
+       raise NotImplementedError(f"Architecture {config['architecture']} not implemented")
+    print(gin_config)
     gin_bindings = get_bindings_and_params(config)
-
+    print(gin_bindings)
     return train_with_gin(model_dir=logdir,
                         overwrite=False,
                         load_weights=False,
-                        gin_config_files=gin_config,
+                        gin_config_files=[gin_config],
                         gin_bindings=gin_bindings,
                         seed=666, reproducible=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description='Script to pass the config to the trainer')
-    parser.add_argument('--config-path',dest='config_path', help='Path to yaml config', default='./config.yaml')
-    parser.add_argument('--gin-dir',dest='gin_dir', help='directory of the gin config files', default='./configs/hirid/Classification')
+    parser.add_argument('--config-path',dest='config_path', help='Path to yaml config', default='config.yaml')
+    parser.add_argument('--gin-dir',dest='gin_dir', help='directory of the gin config files', default='configs/hirid/Classification')
     parser.add_argument('--logdir', help='path to the log directory', type=str)
     
     args = parser.parse_args()
@@ -66,7 +62,7 @@ def get_bindings_and_params(config):
 
     if "task" in config:
         task = config["task"]
-        gin_bindings += ['TASK = ' + str(task)]
+        gin_bindings += ['TASK = "' + str(task)+'"']
 
     if "hidden" in config:
         hidden = config["hidden"]
