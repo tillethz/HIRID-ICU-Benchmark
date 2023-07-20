@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from icu_benchmarks.models.layers import TransformerBlock, LocalBlock, parrallel_recomb,\
-    TemporalBlock, SparseBlock, PositionalEncoding
+    TemporalBlock, DenseBlock, SparseBlock, PositionalEncoding
 
 
 @gin.configurable('LSTM')
@@ -179,5 +179,64 @@ class TemporalConvNet(nn.Module):
         x = x.permute(0, 2, 1)  # Permute to channel first
         o = self.network(x)
         o = o.permute(0, 2, 1)  # Permute to channel last
+        pred = self.logit(o)
+        return pred
+
+
+@gin.configurable('MultiTCN')
+class TemporalConvNet(nn.Module):
+    def __init__(self, num_inputs, num_channels, num_classes, fc_depth,
+                 fc_num_channels=None, max_seq_length=0, kernel_size=2, dropout=0.0):
+        super(TemporalConvNet, self).__init__()
+        self.num_inputs = num_inputs
+
+        conv_layers = [None] * num_inputs
+
+        # We compute automatically the depth based on the desired seq_length.
+        if isinstance(num_channels, int) and max_seq_length:
+            num_channels = [num_channels] * int(np.ceil(np.log(max_seq_length / 2) / np.log(kernel_size)))
+        elif isinstance(num_channels, int) and not max_seq_length:
+            raise Exception('a maximum sequence length needs to be provided if num_channels is int')
+
+        num_levels = len(num_channels)
+
+        for j in range(num_inputs):
+            conv_layers[j] = []
+            for i in range(num_levels):
+                dilation_size = 2 ** i
+                in_channels = 1 if i == 0 else num_channels[i - 1]
+                out_channels = num_channels[i]
+                conv_layers[j] += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+                                         padding=(kernel_size - 1) * dilation_size, dropout=dropout)]
+
+        self.networks = [nn.Sequential(*layers) for layers in conv_layers]
+
+        # fully connected network
+        if fc_num_channels is None:
+            fc_num_channels = [num_channels[-1]]*(fc_depth)
+        elif isinstance(fc_num_channels,int):
+            fc_num_channels = [fc_num_channels]*(fc_depth)
+        fc_num_channels = [num_channels[-1]*num_inputs,*fc_num_channels]
+
+        self.skip_fc = (fc_depth == 0)
+        
+        if not self.skip_fc:
+            fc_layers = []
+            for i in range(fc_depth):
+                fc_layers += DenseBlock(fc_num_channels[i], fc_num_channels[i+1])
+            self.fc = nn.Sequential(*fc_layers)
+
+        self.logit = nn.Linear(fc_num_channels[-1], num_classes)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)  # Permute to channel first
+        # apply TCN to each channel
+        conv = [None]*self.num_inputs
+        for i, network in self.networks:
+            conv[i] = network(x[:,i,:])
+        o = torch.concat(conv, dim=1)
+        o = o.permute(0, 2, 1)  # Permute to channel last
+        if not self.skip_fc:
+            o = self.fc(o)
         pred = self.logit(o)
         return pred

@@ -312,3 +312,21 @@ class TemporalBlock(nn.Module):
         out = self.net(x)
         res = x if self.downsample is None else self.downsample(x)
         return self.relu(out + res)
+
+class DenseBlock(nn.Module):
+    def __init__(self, n_input, n_ouput, dropout=0):
+        super(FullyConnected, self).__init__()
+
+        self.linear = nn.Linear(n_inputs, n_ouput)
+        self.activation = nn.ReLU()
+        self.norm = nn.BatchNorm1d(n_output)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out = self.linear(x)
+        out = self.norm(out)
+        out = self.dropout(out)
+        out = self.activation(out)
+
+        return out
+        
